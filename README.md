@@ -100,6 +100,11 @@ The program logs, every 5 s, the image rate, the frame rate, the auto-gain, and 
 The repo does not drive a second strip. `flux_ip` / `flux_port` make the program send a UDP frame (15 × RGB = 45 bytes: one ambiance colour for the whole picture)
 to any listener you write; the author's own consumer is a patched copy of a Bluetooth Home Assistant integration and is not published here.
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md): reading the picture from Jellyfin / Plex / Kodi ahead of playback (no load on the Fire TV, and the LED can land *exactly* with the picture
+because the latency is compensated), HDMI capture, more outputs (WLED, Hue), a latency bench, automatic calibration.
+
 ## Tests
 
 ```bash
