@@ -1,0 +1,27 @@
+# Copier en config.toml (ignoré par git). Tout réglage absent prend la valeur par défaut de ambilight/config.py.
+# Chaque réglage peut aussi être forcé par une variable d'environnement AMBI_<NOM> (ex. AMBI_HZ=20).
+
+# capture = "raw"                # "raw" (défaut, sans ffmpeg) ou "h264" (repli si le mode brut ne marche pas sur votre Fire TV)
+fire_ip   = "192.168.1.50"       # Fire TV (Paramètres > Mon Fire TV > Options pour les développeurs > Débogage ADB)
+ruban_ip  = "192.168.1.60"       # ruban Govee (app Govee > Paramètres de l'appareil > Contrôle LAN)
+adb_cle   = "adbkey"             # clé privée ADB, relative à CE fichier
+
+# Optionnel : envoie une trame UDP (15 x RVB) à un récepteur de votre choix (2e ruban d'ambiance). "" = désactivé. Voir README.
+flux_ip   = ""
+# flux_port = 4011
+# bas_segments = 15
+
+# Service de contrôle HTTP : ajouter l'adresse de Home Assistant.
+ctl_autorises = ["127.0.0.1", "192.168.1.10"]
+
+# Position de chaque segment du ruban autour de l'écran : [s du centre, écart-type], dans l'ordre du ruban.
+# s = coordonnée de périmètre : 0 = coin haut-gauche, 0-1 le haut (G->D), 1-2 le côté droit (H->B),
+# 2-3 le bas (D->G), 3-4 le côté gauche (B->H). À MESURER (voir README, « Calibrate the segments »).
+# Exemple ci-dessous : un H619A (15 segments) dont le ruban, trop long pour le tour, fait un aller-retour en haut.
+segments = [
+  [0.41, 0.14], [0.68, 0.14], [1.46, 0.30], [2.12, 0.20], [2.30, 0.16],
+  [2.50, 0.16], [2.74, 0.18], [3.00, 0.22], [3.36, 0.20], [3.69, 0.22],
+  [0.275, 0.14], [0.455, 0.12], [0.625, 0.12], [0.825, 0.14], [0.62, 0.16],
+]
+
+# balance = [1.0, 1.0, 1.0]      # balance des blancs du ruban (R, V, B) si les blancs tirent sur une couleur

@@ -1,0 +1,23 @@
+# configuration.yaml : commandes vers le service de contrôle (adresse de la machine qui exécute ambilight)
+rest_command:
+  ambilight_on:
+    url: "http://192.168.1.20:8099/on"
+    method: POST
+  ambilight_off:
+    url: "http://192.168.1.20:8099/off"
+    method: POST
+
+# Un interrupteur + deux automatisations (allumer / éteindre)
+input_boolean:
+  ambilight:
+    name: Ambilight
+
+automation:
+  - alias: Ambilight - allumer
+    triggers: [{trigger: state, entity_id: input_boolean.ambilight, to: "on"}]
+    actions:
+      - action: rest_command.ambilight_on
+  - alias: Ambilight - éteindre
+    triggers: [{trigger: state, entity_id: input_boolean.ambilight, to: "off"}]
+    actions:
+      - action: rest_command.ambilight_off

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ambilight-firetv-govee"
+version = "0.1.0"
+description = "Ambilight en direct : des rubans Govee suivent les bords de l'écran d'une Fire TV (ADB + ffmpeg + mode razer)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "adb-shell==0.4.4"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+ambilight = "ambilight.__main__:cli"
+ambilight-ctl = "ambilight.ctl:cli"
+
+[tool.setuptools]
+packages = ["ambilight"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

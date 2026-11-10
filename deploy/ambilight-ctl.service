@@ -1,0 +1,23 @@
+[Unit]
+Description=Ambilight - ruban Govee qui suit l'ecran de la Fire TV (controle HTTP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ambilight
+WorkingDirectory=/opt/ambilight
+ExecStart=/opt/ambilight/venv/bin/python -u -m ambilight.ctl -c /opt/ambilight/config.toml
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

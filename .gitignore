@@ -1,0 +1,7 @@
+adbkey
+adbkey.pub
+config.toml
+*.env
+.venv/
+__pycache__/
+*.egg-info/
