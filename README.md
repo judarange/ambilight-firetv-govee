@@ -102,8 +102,7 @@ to any listener you write; the author's own consumer is a patched copy of a Blue
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md): reading the picture from Jellyfin / Plex / Kodi ahead of playback (no load on the Fire TV, and the LED can land *exactly* with the picture
-because the latency is compensated), HDMI capture, more outputs (WLED, Hue), a latency bench, automatic calibration.
+See [ROADMAP.md](ROADMAP.md): reading the picture from Jellyfin / Plex / Kodi ahead of playback (no load on the Fire TV, latency compensated), HDMI capture, more outputs.
 
 ## Tests
 
