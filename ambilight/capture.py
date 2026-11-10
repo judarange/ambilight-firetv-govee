@@ -1,9 +1,10 @@
 """Entrées : image de la Fire TV par ADB, de deux façons au choix (`capture` dans la configuration) :
 
-  raw   `screenrecord --output-format=raw-frames` : images RGB brutes, sans encodeur ni ffmpeg, sans limite de durée (défaut)
-  h264  `screenrecord` en h264 -> ffmpeg : repli pour une Fire TV dont le mode brut ne marche pas
+  h264  `screenrecord` en h264 -> ffmpeg (défaut) : l'encodeur matériel de la Fire TV fait le travail, elle ne ralentit pas
+  raw   `screenrecord --output-format=raw-frames` : images RGB brutes, sans ffmpeg ni limite de durée, MAIS la relecture des images
+        charge la Fire TV (mesuré sur une Fire Stick 4K Max : menu à 200 ms par image au lieu de 24)
 
-Dans les deux cas, quand l'écran est FIXE `screenrecord` se tait : une capture d'écran (PNG, décodée par ffmpeg) prend le relais.
+Dans les deux cas, quand l'écran est FIXE `screenrecord` se tait : UNE capture d'écran (PNG, décodée par ffmpeg) prend le relais.
 """
 import logging
 import subprocess
@@ -25,6 +26,7 @@ ERREURS_ADB = (OSError, TcpTimeoutException, adb_exc.AdbTimeoutError, adb_exc.Ad
                adb_exc.InvalidResponseError, adb_exc.InvalidChecksumError, adb_exc.DeviceAuthError)
 SESSION_MIN = 5.0                              # une session plus courte est un échec : on attend avant de se reconnecter
 ATTENTE_MAX = 10.0
+OUVERTURE = 2.0                                # une session s'ouvre toujours par une image, même sur écran fixe : pas un signe de mouvement
 
 
 class FluxMort(Exception):
@@ -66,10 +68,12 @@ def instantane(cfg):
 
 def boucle_adb(cfg, stop, commande, recevoir, amorce=None, debut_session=None):
     """Se (re)connecte à la Fire TV, exécute `commande` et passe chaque morceau reçu à `recevoir(morceau)`.
-    Reconnexion avec attente croissante après un échec rapide ; un silence de 10 s (écran fixe) déclenche `amorce` (capture d'écran).
+    Reconnexion avec attente croissante après un échec rapide ; un silence de 10 s (écran fixe) déclenche `amorce` (capture d'écran),
+    une seule fois tant que l'écran ne bouge pas : une capture coûte ~1,5 s de processeur à la Fire TV.
     Les exceptions de `recevoir` (FluxMort...) ne sont pas des pannes ADB : elles remontent et arrêtent le programme."""
     signer = _signataire(cfg)
     attente = 1.0
+    photo = False                                                # la capture d'écran de cette période d'écran fixe est déjà prise
     while not stop.is_set():
         debut = time.monotonic()
         if debut_session:
@@ -82,9 +86,12 @@ def boucle_adb(cfg, stop, commande, recevoir, amorce=None, debut_session=None):
                 if stop.is_set():
                     break
                 recevoir(morceau)
+                if time.monotonic() - debut > OUVERTURE:         # l'écran bouge de nouveau
+                    photo = False
         except ERREURS_ADB as e:
             log.warning("adb : %s %s", type(e).__name__, e)
-            if amorce and isinstance(e, TcpTimeoutException):    # silence = écran fixe (ou pause) : on prend une photo de l'écran
+            if amorce and isinstance(e, TcpTimeoutException) and not photo:    # silence = écran fixe (ou pause) : UNE photo de l'écran
+                photo = True
                 try:
                     amorce()
                 except Exception as e2:

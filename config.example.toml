@@ -1,7 +1,7 @@
 # Copier en config.toml (ignoré par git). Tout réglage absent prend la valeur par défaut de ambilight/config.py.
 # Chaque réglage peut aussi être forcé par une variable d'environnement AMBI_<NOM> (ex. AMBI_HZ=20).
 
-# capture = "raw"                # "raw" (défaut, sans ffmpeg) ou "h264" (repli si le mode brut ne marche pas sur votre Fire TV)
+# capture = "h264"               # "h264" (défaut) ou "raw" (images brutes, sans ffmpeg : ralentit beaucoup une Fire Stick, voir README)
 fire_ip   = "192.168.1.50"       # Fire TV (Paramètres > Mon Fire TV > Options pour les développeurs > Débogage ADB)
 ruban_ip  = "192.168.1.60"       # ruban Govee (app Govee > Paramètres de l'appareil > Contrôle LAN)
 adb_cle   = "adbkey"             # clé privée ADB, relative à CE fichier

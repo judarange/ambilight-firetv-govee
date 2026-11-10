@@ -3,7 +3,7 @@
 Live ambilight for an Amazon **Fire TV**: a **Govee** LED strip around the TV follows the edges of the screen, **with no HDMI capture box and no camera**.
 
 ```
-Fire TV --ADB: screenrecord raw-frames (RGB, no encoder)--> 96x54 --> zone colours --> render --> Govee strip (LAN "razer" mode)
+Fire TV --ADB: screenrecord (h264) --> ffmpeg --> 96x54 --> zone colours --> render --> Govee strip (LAN "razer" mode)
 ```
 
 * About **26 frames/s** from the Fire TV, one LED frame sent per image received. Latency was measured end to end at roughly **90 ms**
@@ -24,14 +24,15 @@ Fire TV --ADB: screenrecord raw-frames (RGB, no encoder)--> 96x54 --> zone colou
 |---|---|
 | Fire TV | Fire Stick 4K or similar, **ADB debugging over network** enabled |
 | Strip | a Govee strip with **LAN control** and the **razer / DreamView** mode (tested: **H619A**) |
-| A small always-on machine | Linux, Python ≥ 3.11, `ffmpeg` (used for the static-screen screenshot fallback, and for `capture = "h264"`) |
+| A small always-on machine | Linux, Python ≥ 3.11, `ffmpeg` (decodes the h264 stream and the static-screen screenshot) |
 | Optional | Home Assistant, to switch it on/off |
 
 Limits you should know about:
 * Protected apps (Netflix, Prime, Disney+) return a **black screen** to `screenrecord`: the strip stays dark there.
-* A fixed screen makes `screenrecord` go silent: a periodic screenshot takes over, and the first image after a pause can be a few seconds late.
-* The raw mode (`capture = "raw"`, default) was validated on a Fire Stick 4K. If it does not work on your device, set `capture = "h264"`
-  (older path: h264 stream decoded by ffmpeg; it reconnects every 180 s and shows an occasional decoding glitch).
+* A fixed screen makes `screenrecord` go silent: one screenshot takes over, and the first image after a pause can be a few seconds late.
+* The default capture is `h264` (the Fire TV's hardware encoder; it reconnects every 180 s and shows an occasional decoding glitch).
+  `capture = "raw"` (raw RGB frames, no ffmpeg) also works but **slows the Fire TV down a lot**: measured on a Fire Stick 4K Max, the
+  home menu went from 24 ms to 200 ms per frame (`dumpsys gfxinfo`), while h264 was indistinguishable from ambilight off. Not recommended.
 
 ## Install
 

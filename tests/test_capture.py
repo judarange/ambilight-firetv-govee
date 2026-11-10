@@ -45,6 +45,40 @@ def test_ecran_fixe_prend_une_photo_et_continue(monkeypatch):
     assert appels == [1]                                  # la panne de lecture n'a pas fait tomber le fil
 
 
+def test_ecran_fixe_une_seule_photo(monkeypatch):
+    """Écran fixe sur plusieurs sessions : UNE capture d'écran (elle coûte cher à la Fire TV), pas une à chaque silence."""
+    stop, appels, sessions = threading.Event(), [], []
+
+    def silence():
+        sessions.append(1)
+        if len(sessions) == 3:
+            stop.set()
+        yield b"\x00"                                     # image d'ouverture de session : pas un mouvement
+        raise TcpTimeoutException("silence")
+
+    fixer(monkeypatch, silence)
+    monkeypatch.setattr(capture, "SESSION_MIN", 0.0)
+    capture.flux_adb(Reglages(), io.BytesIO(), stop, sync(), amorce=lambda: appels.append(1))
+    assert len(sessions) == 3 and appels == [1]
+
+
+def test_mouvement_puis_ecran_fixe_reprend_une_photo(monkeypatch):
+    stop, appels, sessions = threading.Event(), [], []
+
+    def flux():
+        sessions.append(1)
+        if len(sessions) == 3:
+            stop.set()
+        yield b"\x00"
+        raise TcpTimeoutException("silence")
+
+    fixer(monkeypatch, flux)
+    monkeypatch.setattr(capture, "SESSION_MIN", 0.0)
+    monkeypatch.setattr(capture, "OUVERTURE", -1.0)       # toute donnée compte comme du mouvement
+    capture.flux_adb(Reglages(), io.BytesIO(), stop, sync(), amorce=lambda: appels.append(1))
+    assert appels == [1, 1]
+
+
 def test_ffmpeg_mort_arrete_tout(monkeypatch):
     class Mort(io.BytesIO):
         def write(self, b):

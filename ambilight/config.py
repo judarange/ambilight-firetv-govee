@@ -32,7 +32,7 @@ class Reglages:
     balance: tuple = (1.0, 1.0, 1.0)    # balance des blancs du ruban (R, V, B)
 
     # ---- capture ------------------------------------------------------------------------------------------------
-    capture: str = "raw"                # "raw" : images RGB brutes (sans encodeur, sans limite de 180 s) ; "h264" : repli par ffmpeg
+    capture: str = "h264"               # "h264" : encodeur de la Fire TV + ffmpeg (ne la ralentit pas) ; "raw" : images brutes, CHARGE la Fire TV
     raw_facteur: int = 2                # mode raw : l'image demandée fait raw_facteur x 96x54 et est réduite par moyenne de blocs (2 = 192x108)
     taille: str = "320x180"             # mode h264 : taille du flux screenrecord
     debit: int = 1500000
