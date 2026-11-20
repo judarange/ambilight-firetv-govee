@@ -41,10 +41,13 @@ class Reglages:
 
     # ---- cadence et lissage -------------------------------------------------------------------------------------
     hz: float = 30.0                    # trames/s vers le ruban du tour
-    bas_hz: float = 10.0                # trames/s vers le 2e ruban (BLE : peu de paquets par seconde)
+    bas_hz: float = 8.0                 # trames/s vers le 2e ruban (aligné sur HA ips=8, évite le battement)
     tau_haut: float = 0.025             # lissage : montée rapide (un flash doit passer)
     tau_bas: float = 0.06               # lissage : descente plus douce
-    tau_coupure: float = 0.04           # descente ultra rapide sur un changement de plan
+    tau_flash: float = 0.012            # montée quasi instantanée sur événement local fort (éclair, explosion, laser)
+    flash_seuil: float = 40.0           # écart de canal sur un segment (0-255) qui déclenche la réponse flash locale
+    lissage_oklab: bool = True          # lissage perceptuel en Oklab (transitions soyeuses sans passage au gris/brun)
+    tau_coupure: float = 0.04           # conservé pour compatibilité (le haut saute net sur coupure)
     coupure: float = 46.7               # écart moyen de couleur (0-255) au-delà duquel c'est un changement de plan
     anti_scint: int = 2                 # un segment ne bouge que si un canal change d'au moins ça
     lent: float = 1.0                   # lissage x lent sur les petits changements quand l'image est agitée (voir lent_calme)
@@ -60,6 +63,8 @@ class Reglages:
     prof_v: float = 0.12                # idem côtés (part de la largeur)
     seg_k: float = 0.6                  # largeur de la fenêtre d'un segment (x l'écart mesuré)
     seg_p: float = 3.0                  # forme de la fenêtre : 2 = gaussienne, plus haut = bords plus nets
+    nettete: float = 0.35               # netteté spatiale sur l'anneau (masque flou non-négatif entre segments voisins) ; 0 = aucun
+    bas_bord: float = 0.4               # ancrage du 2e ruban vers le tiers inférieur de l'écran (0 = moyenne uniforme)
     bord_noir: int = 12                 # pixel max sous ce seuil = bande noire (letterbox)
     bord_duree: float = 0.8             # une bande noire n'est prise en compte qu'après ce délai (s)
 
@@ -89,6 +94,9 @@ class Reglages:
     # ---- 2e ruban (ambiance : une seule couleur) ----------------------------------------------------------------
     bas_monte: float = 0.5
     bas_descend: float = 1.2
+    bas_coupure_tau: float = 0.25       # sur un changement de plan, le bas glisse plus vite vers la nouvelle scène
+    bas_gain_max: float = 2.2           # gain auto doux pour le bas (H6125 est ~2x moins lumineux que le H619A)
+    bas_plancher_actif: int = 12        # plancher minimal visible sur H6125 quand la scène n'est pas noire (~4 %)
     bas_flash: float = 70.0             # saut de luminosité en une trame qui déclenche un flash instantané
     pas_bas: int = 3                    # quantification (moins de paquets BLE)
 

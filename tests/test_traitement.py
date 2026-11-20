@@ -126,3 +126,35 @@ def test_effet_adapte_a_l_agitation():
     fond = np.full((N, 4), 50.0); c = np.full((N, 4), 90.0)
     assert np.allclose(accentuer(c, fond, CFG, 0.0), c)               # image calme : aucune accentuation
     assert (accentuer(c, fond, CFG, 1.0)[:, :3] > accentuer(c, fond, CFG, 0.5)[:, :3]).all()
+
+
+def test_bandes_noires_insensible_aux_sous_titres():
+    """Des sous-titres blancs centrés dans la bande noire du bas ne doivent pas casser la détection letterbox."""
+    img = uni(120, 120, 120)
+    img[:7] = 0
+    img[-7:] = 0
+    img[-5:-2, 25:70] = 255                                           # sous-titre blanc centré
+    assert bandes_noires(img, CFG) == (0, 7, 0, 7)
+
+
+def test_lissage_oklab_flash_isoluminant_et_headroom():
+    """Un flash bleu -> rouge à luminosité égale doit réagir vite, et le headroom > 255 doit être préservé."""
+    bleu = np.array([[0.0, 90.0, 255.0, 1.0]])
+    rouge = np.array([[255.0, 40.0, 0.0, 1.0]])
+    out = lisser(bleu, rouge, 0.033, 0.025, 0.06, CFG, lent=1.5)
+    assert out[0, 0] > 200.0                                          # saut rapide malgré max(RGB) identique
+    hi_a = np.array([[100.0, 50.0, 20.0, 1.0]])
+    hi_c = np.array([[340.0, 120.0, 40.0, 1.0]])
+    assert lisser(hi_a, hi_c, 0.033, 0.025, 0.06, CFG, lent=1.0)[0, 0] > 255.0
+
+
+def test_affiner_bords_preserve_blanc_et_renforce_contraste():
+    """La netteté spatiale ne touche pas aux scènes uniformes mais renforce un bord contrasté sans valeur négative."""
+    from ambilight.traitement import affiner_bords
+    blanc = np.full((N, 4), 180.0); blanc[:, 3] = 1.0
+    assert np.allclose(affiner_bords(blanc, CFG), blanc, atol=1e-4)
+    bord = np.zeros((N, 4)); bord[:, 3] = 1.0
+    bord[0, :3] = (200.0, 20.0, 20.0)
+    net = affiner_bords(bord, CFG)
+    assert net[:, :3].min() >= 0.0
+    assert net[0, 0] > bord[0, 0]                                     # segment contrasté renforcé

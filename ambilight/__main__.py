@@ -20,7 +20,7 @@ import numpy as np
 from . import config as conf
 from .capture import FluxMort, flux_adb, flux_raw, instantane, lancer_ffmpeg, veilleur_aud
 from .govee_razer import Razer
-from .traitement import FRAME, H, W, accentuer, activite, bandes_noires, lisser, moyennes, poids, rendu
+from .traitement import FRAME, H, W, accentuer, activite, affiner_bords, bandes_noires, lisser, moyennes, poids, rendu
 
 log = logging.getLogger("ambilight")
 
@@ -58,7 +58,7 @@ class Zones:
         n = len(self.cfg.segments)
         z = moyennes(img, poids(self.cfg, crop), self.cfg)
         with self.verrou:
-            self.resultat = (z[:n], z[n:n + 1])
+            self.resultat = (affiner_bords(z[:n], self.cfg), z[n:n + 1])
             self.n += 1
         self.nouvelle.set()
 
@@ -73,8 +73,11 @@ def lancer_fil(nom, cible, stop, pannes, *args):
         try:
             cible(*args)
         except Exception as e:
-            log.error("fil %s tombé : %s %s", nom, type(e).__name__, e, exc_info=not isinstance(e, FluxMort))
-            pannes.append(nom)
+            if stop.is_set() and isinstance(e, FluxMort):
+                log.debug("fil %s arrêté proprement (%s)", nom, e)
+            else:
+                log.error("fil %s tombé : %s %s", nom, type(e).__name__, e, exc_info=not isinstance(e, FluxMort))
+                pannes.append(nom)
         finally:
             stop.set()
     threading.Thread(target=corps, daemon=True, name=nom).start()
@@ -105,7 +108,7 @@ def boucle(cfg, zones, haut, stop, duree):
     prec_c = sortie_h = sortie_b = prec_m = None
     t0 = last = prev = reactive = time.monotonic()
     t_bas = t_bas_envoi = 0.0
-    n0 = envois = 0
+    n0 = envois = coupures = 0
     dernier_bas = None
     image = False
     try:
@@ -126,14 +129,19 @@ def boucle(cfg, zones, haut, stop, duree):
             g = min(cfg.gain_max, max(1.0, cfg.cible_pic / max(pic, cmax, 8.0)))
             coupure = prec_c is not None and float(np.abs(c[:, :3] - prec_c[:, :3]).mean()) > cfg.coupure     # changement de plan : on ne traîne pas
             prec_c = c
+            if coupure:                                          # changement de plan : le gain saute aussi (sinon la scène sombre remonte en 5-9 s)
+                pic = cmax; coupures += 1
             fond = c.copy() if fond is None or coupure else fond + (1 - math.exp(-dt / cfg.tau_fond)) * (c - fond)      # fond lent (un changement de plan le remet à zéro)
             if n_images != n_vu:                                 # une nouvelle image est arrivée
-                if c_image is not None:
-                    agitation += AGITATION_LISSAGE * (float(np.abs(c[:, :3] - c_image[:, :3]).mean()) - agitation)
+                if c_image is not None and not coupure:          # une simple coupure de plan ne doit pas gonfler l'agitation
+                    delta_seg = np.abs(c[:, :3] - c_image[:, :3]).mean(axis=1)
+                    mesure = 0.6 * float(delta_seg.mean()) + 0.4 * float(np.percentile(delta_seg, 75))
+                    agitation += AGITATION_LISSAGE * (mesure - agitation)
                 c_image, n_vu = c, n_images
             act = activite(agitation, cfg)
             lent = cfg.lent_calme + (cfg.lent - cfg.lent_calme) * act     # image calme : fond lissé ; image agitée : tout suit
-            lisse_h = lisser(lisse_h, accentuer(c, fond, cfg, act), dt, cfg.tau_haut, cfg.tau_coupure if coupure else cfg.tau_bas, cfg, lent)
+            cible = accentuer(c, fond, cfg, act)
+            lisse_h = cible.astype(float) if coupure else lisser(lisse_h, cible, dt, cfg.tau_haut, cfg.tau_bas, cfg, lent)   # changement de plan : saut net, aucun fondu
             sortie = rendu(lisse_h, cfg, g)
             if sortie_h is not None and not coupure:             # anti-scintillement (hystérésis) : on ne commet que les vrais changements
                 garde = np.abs(sortie - sortie_h).max(1) < cfg.anti_scint
@@ -141,13 +149,19 @@ def boucle(cfg, zones, haut, stop, duree):
             sortie_h = sortie
             haut.image([tuple(int(v) for v in x) for x in sortie]); envois += 1
 
-            if bas and now - t_bas >= 1.0 / cfg.bas_hz:          # 2e ruban = AMBIANCE : couleur dominante de toute l'image, lente ; flash sur un gros événement
+            if bas and now - t_bas >= 1.0 / cfg.bas_hz:          # 2e ruban = AMBIANCE : couleur dominante de toute l'image, douce + gain auto dédié
                 flash = prec_m is not None and float(moy.max()) - float(prec_m.max()) > cfg.bas_flash
                 prec_m = moy
-                lisse_b = lisser(lisse_b, moy, now - t_bas if t_bas else dt, cfg.bas_monte, cfg.bas_descend, cfg)   # même sur un changement de plan : il glisse
+                dt_bas = now - t_bas if t_bas else dt
+                tau_bm = cfg.bas_coupure_tau if coupure else cfg.bas_monte
+                tau_bd = cfg.bas_coupure_tau if coupure else cfg.bas_descend
+                lisse_b = lisser(lisse_b, moy, dt_bas, tau_bm, tau_bd, cfg)
                 if flash:
                     lisse_b = np.maximum(lisse_b, moy)
-                z = rendu(lisse_b, cfg, 1.0)[0]
+                g_bas = min(cfg.bas_gain_max, 1.0 + 0.65 * (g - 1.0))
+                z = rendu(lisse_b, cfg, g_bas)[0]
+                if 0 < z.max() < cfg.bas_plancher_actif:         # H6125 s'éteint sous ~4 % : remonter au plancher visible si scène non noire
+                    z = np.clip(np.round(z * (cfg.bas_plancher_actif / float(z.max()))), 0, 255).astype(int)
                 if sortie_b is not None and not flash and np.abs(z - sortie_b).max() < BAS_GARDE:
                     z = sortie_b
                 sortie_b = z
@@ -158,9 +172,9 @@ def boucle(cfg, zones, haut, stop, duree):
                 t_bas = now
 
             if now - last >= 5:
-                log.info("%5.0fs  images %4.1f/s  trames %4.1f/s  gain x%.1f  agitation %.1f (effet %.0f%%)", now - t0,
-                         (n_images - n0) / (now - last), envois / (now - last), g, agitation, 100 * act)
-                n0 = n_images; envois = 0; last = now
+                log.info("%5.0fs  images %4.1f/s  trames %4.1f/s  gain x%.1f  agitation %.1f (effet %.0f%%)  coupures %d", now - t0,
+                         (n_images - n0) / (now - last), envois / (now - last), g, agitation, 100 * act, coupures)
+                n0 = n_images; envois = coupures = 0; last = now
     finally:
         if bas:
             try:
