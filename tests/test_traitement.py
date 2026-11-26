@@ -82,8 +82,12 @@ def test_noir_video_legerement_teinte_reste_eteint():
 
 
 def test_peau_reste_orange_naturel():
-    s = rendu(moyennes(uni(110, 61, 35), poids(CFG), CFG), CFG)[0]
-    assert s[0] > s[1] > s[2] and s[1] / s[0] > 0.45        # pas de vibrance qui vire à l'orange vif
+    z = moyennes(uni(180, 130, 100), poids(CFG), CFG)
+    s = rendu(z, CFG)[0]
+    sans_peau = rendu(z, Reglages(peau=0.0))[0]
+    assert s[0] > s[1] > s[2]
+    assert (s[1] / s[0]) ** (1.0 / CFG.gamma[0]) > 0.65    # reste chair naturelle (ne vire pas à l'orange fluo)
+    assert (s[0] - s[2]) < (sans_peau[0] - sans_peau[2])   # la protection peau Oklab atténue la saturation chair
 
 
 def test_accentuer_le_mouvement():
@@ -158,3 +162,44 @@ def test_affiner_bords_preserve_blanc_et_renforce_contraste():
     net = affiner_bords(bord, CFG)
     assert net[:, :3].min() >= 0.0
     assert net[0, 0] > bord[0, 0]                                     # segment contrasté renforcé
+
+
+def test_noir_video_eteint_meme_avec_gain_auto_x3():
+    """Le seuil noir pré-gain garde (3,12,8) éteint même lorsque le gain automatique monte à x3."""
+    z = moyennes(uni(3, 12, 8), poids(CFG), CFG)
+    assert rendu(z, CFG, g=3.0).max() == 0
+
+
+def test_gamma_jaune_v_et_balance_override():
+    """gamma assombrit les tons moyens, jaune_v freine le vert sur le jaune pur sans toucher au blanc."""
+    gris = np.array([[128.0, 128.0, 128.0, 1.0]])
+    g1 = rendu(gris, CFG, gamma=(1.0, 1.0, 1.0))[0, 0]
+    g2 = rendu(gris, CFG, gamma=(2.2, 2.2, 2.2))[0, 0]
+    assert g2 < g1
+
+    jaune = np.array([[255.0, 255.0, 0.0, 1.0]])
+    blanc = np.array([[255.0, 255.0, 255.0, 1.0]])
+    j_neutre = rendu(jaune, Reglages(jaune_v=1.0))[0]
+    j_freine = rendu(jaune, Reglages(jaune_v=0.80))[0]
+    assert j_freine[1] < j_neutre[1] and j_freine[0] == j_neutre[0]
+    assert np.array_equal(rendu(blanc, Reglages(jaune_v=1.0)), rendu(blanc, Reglages(jaune_v=0.80)))
+
+    b_override = rendu(blanc, CFG, balance=(1.0, 0.5, 0.5))[0]
+    assert b_override[0] > b_override[1] and b_override[1] == b_override[2]
+
+
+def test_bandes_noires_ne_rogne_pas_un_objet_centre_en_haut():
+    """Un objet centré en haut sur fond sombre ne doit pas être rogné comme une bande noire."""
+    img = uni(0, 0, 0)
+    img[10:, :] = 120
+    img[3:8, 30:66] = 200                                             # objet centré en haut (>10 % de la largeur)
+    assert bandes_noires(img, CFG) == (0, 3, 0, 0)
+
+
+def test_accentuer_sans_derive_de_teinte_ni_debordement():
+    """Un fort contraste par rapport au fond lent ne doit pas dépasser le headroom 320 ni créer de valeur négative."""
+    from ambilight.traitement import accentuer
+    fond = np.full((1, 4), 200.0); fond[0, 3] = 1.0
+    c = np.array([[255.0, 40.0, 20.0, 1.0]])
+    out = accentuer(c, fond, Reglages(mouvement=4.0), activite=1.0)
+    assert out[0, :3].min() >= 0.0 and out[0, :3].max() <= 320.001

@@ -27,3 +27,21 @@ def test_reglage_inconnu_refuse(tmp_path):
 def test_installation_obligatoire():
     with pytest.raises(SystemExit):
         config.verifier(config.charger(env={}))
+
+
+def test_gamma_scalaire_et_validation(tmp_path):
+    f = tmp_path / "c.toml"
+    f.write_text('fire_ip = "192.0.2.5"\nruban_ip = "192.0.2.6"\ngamma = 1.6\nbas_gamma = 1.5\n')
+    (tmp_path / "adbkey").write_text("cle")
+    cfg = config.charger(str(f), env={})
+    assert cfg.gamma == (1.6, 1.6, 1.6) and cfg.bas_gamma == (1.5, 1.5, 1.5)
+    config.verifier(cfg)
+
+    for mauvais in (
+        config.Reglages(fire_ip="a", ruban_ip="b", gamma=(0.0, 1.5, 1.5)),
+        config.Reglages(fire_ip="a", ruban_ip="b", bas_gamma=(1.5, 1.5)),
+        config.Reglages(fire_ip="a", ruban_ip="b", jaune_v=1.5),
+        config.Reglages(fire_ip="a", ruban_ip="b", bas_balance=(-0.1, 1.0, 1.0)),
+    ):
+        with pytest.raises(SystemExit):
+            config.verifier(mauvais)

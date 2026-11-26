@@ -43,7 +43,7 @@ def lancer_ffmpeg(cfg):
     # d'image, soit 33 à 42 ms, et la couleur précédente sur un écran fixe). Sans effet sur une machine à un seul cœur.
     return subprocess.Popen(
         ["ffmpeg", "-loglevel", "error", "-flags", "low_delay", "-probesize", "32768", "-analyzeduration", "0",
-         "-f", "h264", "-i", "pipe:0", "-threads", "1", "-vf", f"scale={W}:{H}:flags=area", "-pix_fmt", "rgb24",
+         "-f", "h264", "-i", "pipe:0", "-threads", "1", "-vf", f"format=rgb24,scale={W}:{H}:flags=area", "-pix_fmt", "rgb24",
          "-flush_packets", str(cfg.flush), "-f", "rawvideo", "pipe:1"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 

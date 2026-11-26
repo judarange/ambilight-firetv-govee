@@ -104,13 +104,13 @@ def boucle(cfg, zones, haut, stop, duree):
     bas = (cfg.flux_ip, cfg.flux_port) if cfg.flux_ip else None
     lisse_h = lisse_b = fond = None
     agitation, c_image, n_vu = 0.0, None, -1                    # agitation de l'image : écart de couleur moyen par image, lissé sur ~10 images
-    pic = 100.0
+    pic = pic_bas = 100.0
     prec_c = sortie_h = sortie_b = prec_m = None
     t0 = last = prev = reactive = time.monotonic()
     t_bas = t_bas_envoi = 0.0
     n0 = envois = coupures = 0
     dernier_bas = None
-    image = False
+    image = coupure_bas = False
     try:
         while not stop.is_set() and (duree == 0 or time.monotonic() - t0 < duree):
             # Après une image, on laisse 2 périodes à la suivante : un tic glissé juste avant elle lui volerait son `dt`
@@ -124,13 +124,8 @@ def boucle(cfg, zones, haut, stop, duree):
             if now - reactive >= REACTIVATION:
                 haut.activer(); reactive = now
             c, moy = resultat
-            cmax = float(c[:, :3].max())
-            pic += (1 - math.exp(-dt / (TAU_GAIN_ATTAQUE if cmax > pic else cfg.tau_pic))) * (cmax - pic)
-            g = min(cfg.gain_max, max(1.0, cfg.cible_pic / max(pic, cmax, 8.0)))
             coupure = prec_c is not None and float(np.abs(c[:, :3] - prec_c[:, :3]).mean()) > cfg.coupure     # changement de plan : on ne traîne pas
             prec_c = c
-            if coupure:                                          # changement de plan : le gain saute aussi (sinon la scène sombre remonte en 5-9 s)
-                pic = cmax; coupures += 1
             fond = c.copy() if fond is None or coupure else fond + (1 - math.exp(-dt / cfg.tau_fond)) * (c - fond)      # fond lent (un changement de plan le remet à zéro)
             if n_images != n_vu:                                 # une nouvelle image est arrivée
                 if c_image is not None and not coupure:          # une simple coupure de plan ne doit pas gonfler l'agitation
@@ -141,6 +136,13 @@ def boucle(cfg, zones, haut, stop, duree):
             act = activite(agitation, cfg)
             lent = cfg.lent_calme + (cfg.lent - cfg.lent_calme) * act     # image calme : fond lissé ; image agitée : tout suit
             cible = accentuer(c, fond, cfg, act)
+            # Gain auto calculé sur les zones brutes : évite que les pointes transitoires d'accentuer() n'assombrissent les segments calmes
+            cmax = float(c[:, :3].max())
+            if coupure:                                          # changement de plan : le gain saute aussi (sinon la scène sombre remonte en 5-9 s)
+                pic = cmax; coupures += 1; coupure_bas = True
+            else:
+                pic += (1 - math.exp(-dt / (TAU_GAIN_ATTAQUE if cmax > pic else cfg.tau_pic))) * (cmax - pic)
+            g = min(cfg.gain_max, max(1.0, cfg.cible_pic / max(pic, cmax, 8.0)))
             lisse_h = cible.astype(float) if coupure else lisser(lisse_h, cible, dt, cfg.tau_haut, cfg.tau_bas, cfg, lent)   # changement de plan : saut net, aucun fondu
             sortie = rendu(lisse_h, cfg, g)
             if sortie_h is not None and not coupure:             # anti-scintillement (hystérésis) : on ne commet que les vrais changements
@@ -150,16 +152,23 @@ def boucle(cfg, zones, haut, stop, duree):
             haut.image([tuple(int(v) for v in x) for x in sortie]); envois += 1
 
             if bas and now - t_bas >= 1.0 / cfg.bas_hz:          # 2e ruban = AMBIANCE : couleur dominante de toute l'image, douce + gain auto dédié
-                flash = prec_m is not None and float(moy.max()) - float(prec_m.max()) > cfg.bas_flash
+                moy_max = float(moy[:, :3].max())
+                flash = prec_m is not None and moy_max - float(prec_m[:, :3].max()) > cfg.bas_flash
                 prec_m = moy
                 dt_bas = now - t_bas if t_bas else dt
-                tau_bm = cfg.bas_coupure_tau if coupure else cfg.bas_monte
-                tau_bd = cfg.bas_coupure_tau if coupure else cfg.bas_descend
+                coupe_b = coupure or coupure_bas
+                coupure_bas = False
+                tau_bm = cfg.bas_coupure_tau if coupe_b else cfg.bas_monte
+                tau_bd = cfg.bas_coupure_tau if coupe_b else cfg.bas_descend
                 lisse_b = lisser(lisse_b, moy, dt_bas, tau_bm, tau_bd, cfg)
                 if flash:
-                    lisse_b = np.maximum(lisse_b, moy)
-                g_bas = min(cfg.bas_gain_max, 1.0 + 0.65 * (g - 1.0))
-                z = rendu(lisse_b, cfg, g_bas)[0]
+                    lisse_b = moy.copy()
+                if coupe_b:
+                    pic_bas = moy_max
+                else:
+                    pic_bas += (1 - math.exp(-dt_bas / (TAU_GAIN_ATTAQUE if moy_max > pic_bas else cfg.tau_pic))) * (moy_max - pic_bas)
+                g_bas = min(cfg.bas_gain_max, max(1.0, cfg.cible_pic / max(pic_bas, moy_max, 8.0)))
+                z = rendu(lisse_b, cfg, g_bas, balance=(cfg.bas_balance or cfg.balance), gamma=cfg.bas_gamma)[0]
                 if 0 < z.max() < cfg.bas_plancher_actif:         # H6125 s'éteint sous ~4 % : remonter au plancher visible si scène non noire
                     z = np.clip(np.round(z * (cfg.bas_plancher_actif / float(z.max()))), 0, 255).astype(int)
                 if sortie_b is not None and not flash and np.abs(z - sortie_b).max() < BAS_GARDE:

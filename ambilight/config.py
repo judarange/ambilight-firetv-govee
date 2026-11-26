@@ -30,13 +30,14 @@ class Reglages:
     # 0-1 le haut (G->D), 1-2 le côté droit (H->B), 2-3 le bas (D->G), 3-4 le côté gauche (B->H).
     segments: tuple = SEGMENTS_PAR_DEFAUT
     balance: tuple = (1.0, 1.0, 1.0)    # balance des blancs du ruban (R, V, B)
+    gamma: tuple = (1.45, 1.45, 1.45)   # courbe gamma LED par canal (R, V, B) : coupe le bleu délavant sans assombrir les tons moyens
 
     # ---- capture ------------------------------------------------------------------------------------------------
     capture: str = "h264"               # "h264" : encodeur de la Fire TV + ffmpeg (ne la ralentit pas) ; "raw" : images brutes, CHARGE la Fire TV
     raw_facteur: int = 2                # mode raw : l'image demandée fait raw_facteur x 96x54 et est réduite par moyenne de blocs (2 = 192x108)
     taille: str = "320x180"             # mode h264 : taille du flux screenrecord
     debit: int = 1500000
-    aud_attente: float = 0.005          # silence du flux (s) après lequel l'image est considérée complète
+    aud_attente: float = 0.012          # silence du flux (s) après lequel l'image est considérée complète (évite les images H.264 coupées)
     flush: int = 1                      # ffmpeg -flush_packets
 
     # ---- cadence et lissage -------------------------------------------------------------------------------------
@@ -48,7 +49,7 @@ class Reglages:
     flash_seuil: float = 40.0           # écart de canal sur un segment (0-255) qui déclenche la réponse flash locale
     lissage_oklab: bool = True          # lissage perceptuel en Oklab (transitions soyeuses sans passage au gris/brun)
     tau_coupure: float = 0.04           # conservé pour compatibilité (le haut saute net sur coupure)
-    coupure: float = 46.7               # écart moyen de couleur (0-255) au-delà duquel c'est un changement de plan
+    coupure: float = 25.0               # écart moyen de couleur (0-255) au-delà duquel c'est un changement de plan
     anti_scint: int = 2                 # un segment ne bouge que si un canal change d'au moins ça
     lent: float = 1.0                   # lissage x lent sur les petits changements quand l'image est agitée (voir lent_calme)
     mouvement: float = 2.0              # accentue les changements récents (couleur actuelle - fond lent) pour mieux voir le mouvement ; 0 = aucun
@@ -59,35 +60,38 @@ class Reglages:
     evt: float = 8.0                    # un canal qui bouge de moins que ça est « lent » ; au-delà de evt+35, « rapide »
 
     # ---- zones --------------------------------------------------------------------------------------------------
-    prof_h: float = 0.18                # profondeur d'échantillonnage haut/bas (part de la hauteur)
-    prof_v: float = 0.12                # idem côtés (part de la largeur)
-    seg_k: float = 0.6                  # largeur de la fenêtre d'un segment (x l'écart mesuré)
+    prof_h: float = 0.15                # profondeur d'échantillonnage haut/bas (part de la hauteur)
+    prof_v: float = 0.11                # idem côtés (part de la largeur)
+    prof_p: float = 2.0                 # forme en profondeur : 2 = gaussienne (coupe le centre), 1 = exponentielle
+    seg_k: float = 0.60                 # largeur de la fenêtre d'un segment (x l'écart mesuré)
     seg_p: float = 3.0                  # forme de la fenêtre : 2 = gaussienne, plus haut = bords plus nets
-    nettete: float = 0.35               # netteté spatiale sur l'anneau (masque flou non-négatif entre segments voisins) ; 0 = aucun
+    nettete: float = 0.40               # netteté spatiale sur l'anneau (masque flou anti-halo entre segments voisins) ; 0 = aucun
     bas_bord: float = 0.4               # ancrage du 2e ruban vers le tiers inférieur de l'écran (0 = moyenne uniforme)
     bord_noir: int = 12                 # pixel max sous ce seuil = bande noire (letterbox)
     bord_duree: float = 0.8             # une bande noire n'est prise en compte qu'après ce délai (s)
 
     # ---- couleur ------------------------------------------------------------------------------------------------
     lin: float = 1.8                    # moyenne en lumière ; 2.2 = linéaire strict, 1.0 = moyenne sRGB
-    vif: float = 0.25                   # 0 = moyenne simple, 1 = pixels vifs et clairs pèsent plus
+    vif: float = 0.0                    # 0 = luminosité fidèle en surface (évite qu'un filet lumineux inonde les voisins), 1 = pondéré vivacité
     dominante: float = 1.0              # zone aux couleurs qui se contredisent : prend la couleur DOMINANTE au lieu de la moyenne (mauve + fond clair = beige) ; 0 = aucune
-    vch: float = 0.8                    # part de la teinte « vive » dans la couleur de zone
-    vexp: float = 3.0                   # exposant du poids de vivacité
-    plancher_v: float = 0.006           # poids minimal d'un pixel terne
-    sat: float = 1.15                   # plafond de la vibrance
-    vibr: float = 0.6                   # exposant de vibrance : < 1 pousse les teintes pâles
-    peau: float = 0.8                   # vibrance réduite sur les teintes chair
-    toe: float = 40.0                   # tons très sombres écrasés comme le fait une télé (courbe gamma) : le « noir » d'une vidéo (3,12,8) ne doit pas allumer un vert ; 0 = aucun
-    presence: float = 30.0              # une couleur franche mais sombre est remontée à au moins ça
-    bleu_v: float = 0.22                # bleu pur des LED qui tire sur le violet : on y ajoute du vert
-    gain: float = 1.1
+    vch: float = 0.8                    # part maximale de la teinte « vive » dans la couleur de zone (modulée par la couverture colorée)
+    vexp: float = 2.2                   # exposant du poids de vivacité
+    plancher_v: float = 0.05            # poids minimal d'un pixel terne (limite le ratio vif/fond)
+    sat: float = 1.15                   # conservé pour rétro-compatibilité TOML
+    vibr: float = 0.6                   # conservé pour rétro-compatibilité TOML
+    vibr_ok: float = 0.70               # vibrance perceptuelle Oklab LCh (préserve la teinte)
+    peau: float = 0.85                  # atténuation perceptuelle Oklab + frein vibrance sur les teintes chair
+    toe: float = 22.0                   # seuil noir pré-gain pour nettoyer le bruit noir vidéo (même à gain x3) ; 0 = aucun
+    presence: float = 26.0              # plancher linéaire minimal pour une couleur franche mais sombre
+    jaune_v: float = 1.0                # frein vert orthogonal sur le jaune pur (min(R,V)-B) en linéaire ; 1.0 = neutre
+    bleu_v: float = 0.09                # bleu pur des LED qui tire sur le violet : ajout de vert en linéaire
+    gain: float = 1.22
     plancher: int = 6                   # sous ce niveau, la LED reste éteinte
     genou: float = 200.0                # plafond de luminosité : compression douce vers lum_max
     lum_max: float = 246.0
 
     # ---- gain automatique ---------------------------------------------------------------------------------------
-    cible_pic: float = 170.0            # le segment le plus clair vise ce niveau
+    cible_pic: float = 205.0            # le segment le plus clair vise ce niveau
     gain_max: float = 3.0
     tau_pic: float = 3.0                # le gain remonte lentement, chute tout de suite
 
@@ -96,15 +100,20 @@ class Reglages:
     bas_descend: float = 1.2
     bas_coupure_tau: float = 0.25       # sur un changement de plan, le bas glisse plus vite vers la nouvelle scène
     bas_gain_max: float = 2.2           # gain auto doux pour le bas (H6125 est ~2x moins lumineux que le H619A)
+    bas_gamma: tuple = (1.45, 1.45, 1.45)  # courbe gamma LED dédiée au 2e ruban (R, V, B)
+    bas_balance: tuple = ()             # balance dédiée au 2e ruban ; () = repli sur `balance`
     bas_plancher_actif: int = 12        # plancher minimal visible sur H6125 quand la scène n'est pas noire (~4 %)
     bas_flash: float = 70.0             # saut de luminosité en une trame qui déclenche un flash instantané
-    pas_bas: int = 3                    # quantification (moins de paquets BLE)
+    pas_bas: int = 2                    # quantification (moins de paquets BLE)
 
 
 def _convertir(champ, valeur):
     """Valeur brute (texte d'environnement ou TOML) -> type du champ."""
     defaut = champ.default
     if isinstance(defaut, tuple):
+        if champ.name in ("gamma", "bas_gamma") and isinstance(valeur, (int, float)) and not isinstance(valeur, bool):
+            v = float(valeur)
+            return (v, v, v)
         return tuple(tuple(v) if isinstance(v, list) else v for v in valeur)
     return type(defaut)(valeur)
 
@@ -140,6 +149,12 @@ def verifier(cfg):
         raise SystemExit(f'capture doit valoir "raw" ou "h264" (reçu : {cfg.capture!r})')
     if cfg.hz <= 0 or cfg.raw_facteur < 1 or cfg.lum_max <= cfg.genou or not cfg.segments:
         raise SystemExit("réglages incohérents : hz > 0, raw_facteur >= 1, lum_max > genou et au moins un segment sont obligatoires")
+    if len(cfg.gamma) != 3 or any(v <= 0 for v in cfg.gamma) or len(cfg.bas_gamma) != 3 or any(v <= 0 for v in cfg.bas_gamma):
+        raise SystemExit("réglages incohérents : gamma et bas_gamma doivent contenir 3 valeurs > 0")
+    if not (0.0 < cfg.jaune_v <= 1.2):
+        raise SystemExit(f"jaune_v doit être dans (0, 1.2] (reçu : {cfg.jaune_v!r})")
+    if cfg.bas_balance and (len(cfg.bas_balance) != 3 or any(v < 0 for v in cfg.bas_balance)):
+        raise SystemExit("réglages incohérents : bas_balance doit être vide ou contenir 3 valeurs >= 0")
     manque = [n for n in ("fire_ip", "ruban_ip") if not getattr(cfg, n)]
     if manque:
         raise SystemExit(f"réglage(s) obligatoire(s) manquant(s) : {', '.join(manque)} (voir config.example.toml)")

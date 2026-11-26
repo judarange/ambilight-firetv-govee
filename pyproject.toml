@@ -17,6 +17,7 @@ test = ["pytest"]
 [project.scripts]
 ambilight = "ambilight.__main__:cli"
 ambilight-ctl = "ambilight.ctl:cli"
+ambilight-calibrer = "ambilight.calibrer:cli"
 
 [tool.setuptools]
 packages = ["ambilight"]

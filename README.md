@@ -8,12 +8,14 @@ Fire TV --ADB: screenrecord (h264) --> ffmpeg --> 96x54 --> zone colours --> ren
 
 * About **26 frames/s** from the Fire TV, one LED frame sent per image received. Latency was measured end to end at roughly **90 ms**
   with a browser clock page shown on the TV (so it includes the browser's own rendering, and the TV's display delay is not counted).
-* The colour pipeline is tuned by eye on real content (talk shows, films, anime), not just maths: linear-light averaging, edge-weighted zones,
-  vibrance that keeps whites white and skin tones natural, **dominant colour** for zones where hues cancel (a purple character in front of a
-  pale background stays purple instead of averaging to beige), a toe curve so a video's "black" `(3,12,8)` does not light a green LED, black-bar
-  (letterbox) detection, automatic gain for dark scenes, a soft ceiling for snow/sunlight, flicker hysteresis, and **motion emphasis that adapts**:
+* The colour pipeline is tuned by eye on real content (talk shows, films, anime), not just maths: linear-light averaging, Gaussian edge-weighted
+  zones with anti-halo Rec.709 spatial sharpening (`nettete`), perceptual **Oklab** smoothing and LCh vibrance (`vibr_ok`) that keeps whites white
+  and skin tones natural (YCbCr + Oklab skin mask), **dominant colour** (18 hue bins) for zones where hues cancel (a purple character in front of a
+  pale background stays purple instead of averaging to beige), a pre-gain black-gate toe curve so a video's "black" `(3,12,8)` does not light a
+  green LED even at ×3 auto-gain, per-channel LED **gamma** calibration, subtitle-safe black-bar (letterbox) detection, automatic gain for dark
+  scenes, a soft ceiling for snow/sunlight, hard cuts on scene changes, flicker hysteresis, and **motion emphasis that adapts**:
   calm on a talk show, full on a fight scene or lightning.
-* Pure-numpy core (`ambilight/traitement.py`) with unit tests that need no hardware.
+* Pure-numpy core (`ambilight/traitement.py`) with an interactive LED colour calibration CLI (`python -m ambilight.calibrer`) and unit tests that need no hardware.
 
 > Language: the code, comments, configuration keys, `--help` and log lines are in **French** (the author's language). The README is in English.
 > A glossary of the main settings is in `ambilight/config.py` (each field has a comment).
@@ -63,6 +65,17 @@ The strip is rarely a clean loop around the screen (too long, a fold-back, a sta
 
 `config.example.toml` shows a real, measured H619A that is too long for the TV and folds back along the top.
 
+## Calibrate the LED colours (gamma & white balance)
+
+LED strips are PWM-linear while TVs are sRGB, and each strip has its own colour cast. An interactive CLI lets you tune `gamma`, `balance`, `jaune_v` and `bleu_v` live on 9 test patterns (white, 50 % grey, pure yellow, warm gold, pastel yellow, orange, pure blue, violet, full sweep) using the exact production `rendu()` pipeline:
+
+```bash
+python -m ambilight.calibrer -c config.toml --arreter-ctl   # pauses ambilight.ctl, restores it on exit, prints TOML
+python -m ambilight.calibrer -c config.toml --simuler       # dry run without hardware
+```
+
+Press `1`–`9` to switch patterns, `r/R g/G b/B` for white balance, `[ / ]` (or `x/X y/Y z/Z`) for gamma, `j/J` for yellow green-brake, `v/V` for blue correction, `Tab` to switch strips, and `p` or `q` to print the ready-to-paste `config.toml` block.
+
 ## Run it as a service (with an HTTP switch)
 
 `ambilight.ctl` starts/stops the program and restarts it if it dies:
@@ -88,11 +101,14 @@ The most useful knobs:
 |---|---|
 | `mouvement`, `agitation_min`, `agitation_max` | strength of the motion emphasis, and the image agitation between which it fades in (talk show → fight scene) |
 | `lent_calme`, `lent` | smoothing of small changes on a calm / an agitated image |
+| `lissage_oklab`, `tau_flash`, `coupure` | perceptual Oklab smoothing, fast local flash response, and scene-cut threshold (instant jump on main strip) |
 | `dominante` | 1 = a zone whose hues cancel takes its dominant colour instead of the average; 0 = off |
-| `toe` | crush of very dark levels (a video "black" is rarely 0); 0 = off |
-| `seg_k`, `seg_p` | how tightly a segment samples its zone (less spill into neighbours) |
+| `vibr_ok`, `peau` | Oklab LCh vibrance (hue-preserving) and skin-tone protection |
+| `gamma`, `balance`, `jaune_v`, `bleu_v` | per-channel LED gamma, white balance, pure-yellow green brake, and pure-blue tint correction (tunable via `ambilight.calibrer`) |
+| `toe`, `presence` | pre-gain black-gate crush of dark video noise and linear floor for saturated dark colours |
+| `seg_k`, `seg_p`, `nettete` | how tightly a segment samples its zone and anti-halo spatial edge sharpening |
 | `genou`, `lum_max` | soft brightness ceiling for bright scenes |
-| `balance` | white balance of the strip |
+| `aud_attente` | h264 silence delay (s) before injecting an AUD flush delimiter (increase if logs warn of cut frames) |
 
 The program logs, every 5 s, the image rate, the frame rate, the auto-gain, and the image agitation with the resulting motion effect.
 
